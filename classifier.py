@@ -55,7 +55,38 @@ def build_few_shot_prompt(labeled_examples: list[dict], description: str) -> str
 
     Before writing code, complete specs/classifier-spec.md.
     """
-    return ""
+
+
+
+    lines = [
+            "You are classifying podcast episodes by their format.",
+            f"Classify the episode into exactly one of: {', '.join(VALID_LABELS)}.",
+            "",
+            "- interview: a host in conversation/Q&A with one or more guests",
+            "- solo: one host speaking from their own memory, experience, or opinion; no guests, nothing assembled from outside",
+            "- panel: multiple guests with roughly equal speaking time discussing or debating",
+            "- narrative: a story assembled from external sources (interviews, archival audio, reporting) into an arc, even if one voice narrates",
+            "",
+            "Here are labeled examples:",
+            "",
+        ]
+    for ex in labeled_examples:
+            lines.append(f"Title: {ex['title']}")
+            lines.append(f"Description: {ex['description']}")
+            lines.append(f"Label: {ex['label']}")
+            lines.append("---")
+
+    lines += [
+            "",
+            "Now classify this episode:",
+            "",
+            f"Description: {description}",
+            "",
+            "Respond with the label on the FIRST line by itself (one of: "
+            f"{', '.join(VALID_LABELS)}), then one sentence of reasoning on the next line.",
+        ]
+    return "\n".join(lines)
+
 
 
 def classify_episode(description: str, labeled_examples: list[dict]) -> dict:
@@ -76,7 +107,25 @@ def classify_episode(description: str, labeled_examples: list[dict]) -> dict:
 
     Before writing code, complete specs/classifier-spec.md.
     """
-    return {
-        "label": None,
-        "reasoning": "Classifier not yet implemented. Complete Milestone 2.",
-    }
+
+    prompt = build_few_shot_prompt(labeled_examples, description)
+    try:
+        response = _client.chat.completions.create(
+            model=LLM_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=300,
+            temperature=0,
+        )
+        text = response.choices[0].message.content
+        parts = text.strip().splitlines()
+        first = "".join(c for c in parts[0].lower() if c.isalpha())  # "**Interview**" -> "interview"
+        if first in VALID_LABELS:
+            label = first
+        else:
+            label = next((l for l in VALID_LABELS if l in text.lower()), "unknown")
+        
+        reasoning = " ".join(parts[1:]).strip() or text.strip()
+        return{"label": label, "reasoning": reasoning}
+    
+    except Exception as e:
+        return {"label": "unknown", "reasoning": f"error: {e}"}
