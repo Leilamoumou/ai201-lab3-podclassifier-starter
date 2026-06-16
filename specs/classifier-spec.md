@@ -159,9 +159,10 @@ Extract the response text from:
 **Step 3 — Parse the response:**
 
 ```
-[blank — how do you extract the label and reasoning from the LLM's text output?
-What string operations or parsing logic do you need?
-This depends on the output format you chose in build_few_shot_prompt.]
+[Strip the response and split it into lines. Take line 1, lowercase it, and keep
+only alphabetic characters — this drops markdown ("**Interview**" -> "interview")
+and stray punctuation. The reasoning is the remaining lines joined together
+(falling back to the full text if there is only one line).]
 ```
 
 ---
@@ -169,8 +170,11 @@ This depends on the output format you chose in build_few_shot_prompt.]
 **Step 4 — Validate the label:**
 
 ```
-[blank — what do you do if the LLM returns a label that isn't in VALID_LABELS?
-What should label be set to?]
+[Check the normalized first line against VALID_LABELS. If it is an exact member,
+use it. If not, scan the full response for any VALID_LABELS substring (catches
+stray formats like "Label: interview"). If still nothing matches, set label to
+"unknown". Validate in code regardless of what the prompt asked for — never
+trust the model to constrain itself to the four labels.]
 ```
 
 ---
@@ -178,9 +182,10 @@ What should label be set to?]
 **Step 5 — Handle errors gracefully:**
 
 ```
-[blank — what could go wrong? (Network error? Unparseable response?)
-What should the function return if something fails?
-Hint: the evaluation loop runs 20 calls — one bad response shouldn't crash everything.]
+[Wrap the whole thing (prompt build, API call, parse) in try/except. On any
+exception — network error, rate limit, unparseable response — return
+{"label": "unknown", "reasoning": f"error: {e}"} instead of raising. The M3
+evaluation loop makes 20 sequential calls; one failure must not crash the run.]
 ```
 
 ---
@@ -190,7 +195,7 @@ Hint: the evaluation loop runs 20 calls — one bad response shouldn't crash eve
 ```python
 {
     "label": str,      # one of VALID_LABELS, or "unknown" if invalid/error
-    "reasoning": str,  # brief explanation from the LLM
+    "reasoning": str,  # concise explanation from the LLM
 }
 ```
 
@@ -213,24 +218,35 @@ any labels you're unsure about. Annotation quality is part of the lab.
 **Test: what does the raw LLM response look like for one episode?**
 
 ```
-Episode tested: [title]
-Raw response text: [paste it here]
+Episode tested: Dr. Priya Nair on the Science of Sleep Deprivation
+Raw response text:
+interview
+The episode is built around the host drawing out one guest's research through
+questions, which is the host-guest dynamic that defines interview.
 ```
 
 **How did you parse the label out of the response?**
 
 ```
-[describe the string operations — strip, split, lower, etc.]
+Strip the response, split into lines, take line 1, lowercase it, and keep only
+alphabetic characters so markdown and punctuation drop out ("**Interview**" ->
+"interview"). Check that against VALID_LABELS; if it doesn't match, scan the
+full response for any valid-label substring; if still nothing, use "unknown".
+Reasoning = the remaining lines joined.
 ```
 
 **Did any episodes return `"unknown"`? If so, why?**
 
 ```
-[yes / no — if yes, what did the raw response look like?]
-```
+No, the label-on-first-line format plus the substring fallback caught every
+response.```
 
 **One thing about the output format that surprised you:**
 
 ```
-[your answer here]
+At temperature 0 the model was far more consistent than expected, and it almost
+always returned the bare label on line 1, so the substring fallback rarely
+fired. 
 ```
+
+
